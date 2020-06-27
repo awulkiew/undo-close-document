@@ -1,0 +1,8 @@
+Visual_Studio_2017/.vs
+Visual_Studio_2017/UndoCloseDocument/UndoCloseDocument.csproj.user
+Visual_Studio_2017/UndoCloseDocument/bin
+Visual_Studio_2017/UndoCloseDocument/obj
+Visual_Studio_2017/packages
+Visual_Studio_2017/*.sdf
+Visual_Studio_2017/*.db
+Visual_Studio_2017/*.opendb
