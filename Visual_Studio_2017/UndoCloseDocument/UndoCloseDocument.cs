@@ -1,14 +1,15 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel.Design;
-using System.Globalization;
-using System.Threading;
-using System.Threading.Tasks;
+﻿//------------------------------------------------------------------------------
+// <copyright>
+//     Copyright (c) Adam Wulkiewicz.
+// </copyright>
+//------------------------------------------------------------------------------
+
 using EnvDTE;
 using EnvDTE80;
 using Microsoft.VisualStudio.Shell;
-using Microsoft.VisualStudio.Shell.Interop;
-using Task = System.Threading.Tasks.Task;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel.Design;
 
 namespace UndoCloseDocument
 {
@@ -34,7 +35,8 @@ namespace UndoCloseDocument
 
         private DTE2 dte;
         private Events events;
-        private WindowEvents windowEvents;
+        private DocumentEvents documentEvents;
+        //private WindowEvents windowEvents;
 
         // See:
         // https://docs.microsoft.com/en-us/visualstudio/extensibility/dynamically-adding-menu-items
@@ -75,20 +77,19 @@ namespace UndoCloseDocument
         /// <param name="commandService">Command service to add command to, not null.</param>
         private UndoCloseDocument(Package package, OleMenuCommandService commandService, DTE2 dte)
         {
-            ThreadHelper.ThrowIfNotOnUIThread();
-
             this.package = package ?? throw new ArgumentNullException(nameof(package));
             commandService = commandService ?? throw new ArgumentNullException(nameof(commandService));
-            this.dte = dte ?? throw new ArgumentNullException(nameof(dte));
+            this.dte = dte ?? throw new ArgumentNullException("DTE");
 
             this.events = this.dte.Events ?? throw new NullReferenceException(nameof(this.events));
 
-            // Use WindowEvents instead of DocumentEvents because
-            //   document == null is passed into the the latter for
-            //   existing but non previously viewed tags.
-            this.windowEvents = this.events.WindowEvents ?? throw new NullReferenceException(nameof(this.windowEvents));
-            this.windowEvents.WindowCreated += WindowEvents_WindowCreated;
-            this.windowEvents.WindowClosing += WindowEvents_WindowClosing;
+            this.documentEvents = this.events.DocumentEvents ?? throw new NullReferenceException("DocumentEvents");
+            this.documentEvents.DocumentOpening += DocumentEvents_DocumentOpening;
+            //this.documentEvents.DocumentOpened += DocumentEvents_DocumentOpened;
+            this.documentEvents.DocumentClosing += DocumentEvents_DocumentClosing;
+            //this.windowEvents = this.events.WindowEvents ?? throw new NullReferenceException("WindowEvents");
+            //this.windowEvents.WindowCreated += WindowEvents_WindowCreated;
+            //this.windowEvents.WindowClosing += WindowEvents_WindowClosing;
 
             var menuCommandID = new CommandID(CommandSet, CommandId);
             //var menuItem = new MenuCommand(this.Execute, menuCommandID);
@@ -129,8 +130,6 @@ namespace UndoCloseDocument
         /// <param name="package">Owner package, not null.</param>
         public static void Initialize(UndoCloseDocumentPackage package)
         {
-            ThreadHelper.ThrowIfNotOnUIThread();
-
             OleMenuCommandService commandService = package.GetService(typeof(IMenuCommandService)) as OleMenuCommandService;
             DTE2 dte = package.GetService(typeof(DTE)) as DTE2;
 
@@ -155,8 +154,6 @@ namespace UndoCloseDocument
         /// <param name="e">Event args.</param>
         private void Execute(object sender, EventArgs e)
         {
-            ThreadHelper.ThrowIfNotOnUIThread();
-
             if (closedDocuments.Count <= 0)
                 return;
 
@@ -164,52 +161,37 @@ namespace UndoCloseDocument
             string fullName = closedDocuments[lastIndex];
             closedDocuments.RemoveAt(lastIndex);
 
-            foreach (Window w in dte.Windows)
-                if (w.Document != null
-                        && w.Document.FullName == fullName)
-                    return; // already opened
-
             //if (!dte.ItemOperations.IsFileOpen(fullName))
                 dte.ItemOperations.OpenFile(fullName);
         }
 
-        private void WindowEvents_WindowCreated(Window window)
+        private void DocumentEvents_DocumentClosing(Document document)
         {
-            ThreadHelper.ThrowIfNotOnUIThread();
+            if (document != null)
+            {
+                closedDocuments.Add(document.FullName);
 
-            // All of this HashSet/loop magic is here because
-            // neither dte.Events.DocumentEvents nor dte.Documents
-            // nor window.Document are fully reliable.
-            foreach (Window w in dte.Windows)
-                if (w.Document != null
-                        && openedDocuments.Add(w.Document.FullName))
-                    closedDocuments.Remove(w.Document.FullName);
+                if (closedDocuments.Count > 10)
+                    closedDocuments.RemoveRange(0, closedDocuments.Count - 10);
+            }
+        }
 
-            if (window.Document != null)
-                closedDocuments.Remove(window.Document.FullName);
+        private void DocumentEvents_DocumentOpening(string DocumentPath, bool ReadOnly)
+        {
+            if (DocumentPath != null)
+                closedDocuments.Remove(DocumentPath);
+        }
+
+        private void DocumentEvents_DocumentOpened(Document document)
+        {
+        }
+
+        private void WindowEvents_WindowCreated(Window window)
+        {   
         }
 
         private void WindowEvents_WindowClosing(Window window)
         {
-            ThreadHelper.ThrowIfNotOnUIThread();
-
-            // All of this HashSet/loop magic is here because
-            // neither dte.Events.DocumentEvents nor dte.Documents
-            // nor window.Document are fully reliable.
-            HashSet<string> docs = new HashSet<string>();
-            foreach (Window w in dte.Windows)
-                if (w.Document != null)
-                    docs.Add(w.Document.FullName);
-
-            openedDocuments.ExceptWith(docs);
-
-            foreach (string s in openedDocuments)
-                closedDocuments.Add(s);
-
-            openedDocuments = docs;
-
-            if (closedDocuments.Count > 10)
-                closedDocuments.RemoveRange(0, closedDocuments.Count - 10);
         }
 
         private bool IsValidDynamicItem(int commandId)
@@ -276,11 +258,6 @@ namespace UndoCloseDocument
                 string fullName = closedDocuments[i];
                 closedDocuments.RemoveAt(i);
 
-                foreach (Window w in dte.Windows)
-                    if (w.Document != null
-                            && w.Document.FullName == fullName)
-                        return; // already opened
-
                 //if (!dte.ItemOperations.IsFileOpen(fullName))
                     dte.ItemOperations.OpenFile(fullName);
             }
@@ -308,15 +285,6 @@ namespace UndoCloseDocument
             return path.Substring(0, firstIndex + 1) + "..." + path.Substring(i);
         }
 
-        int FindFirstOf(int i1, int i2)
-        {
-            int result = i1;
-            if (i2 >= 0 && i2 < i1)
-                result = i2;
-            return result;
-        }
-
-        HashSet<string> openedDocuments = new HashSet<string>();
         List<string> closedDocuments = new List<string>();
     }
 }
