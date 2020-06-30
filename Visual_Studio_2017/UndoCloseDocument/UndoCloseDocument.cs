@@ -6,7 +6,9 @@
 
 using EnvDTE;
 using EnvDTE80;
+using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
+using Microsoft.VisualStudio.Shell.Interop;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.Design;
@@ -33,10 +35,40 @@ namespace UndoCloseDocument
         /// </summary>
         private readonly Package package;
 
+        private IVsUIShell uiShell;
         private DTE2 dte;
+
         private Events events;
-        private DocumentEvents documentEvents;
-        //private WindowEvents windowEvents;
+        private SolutionEvents solutionEvents;
+        //private DocumentEvents documentEvents;
+        private WindowEvents windowEvents;
+        //private CommandEvents commandEvents;
+
+        private List<Path> closedDocuments = new List<Path>();
+        private HashSet<Path> openedDocuments = new HashSet<Path>(new PathComparer());
+
+        class Path
+        {
+            public Path(string path)
+            {
+                Original = path;
+                CaseInsensitive = path.ToLowerInvariant();
+            }
+
+            public bool IsSame(Path other)
+            {
+                return CaseInsensitive == other.CaseInsensitive;
+            }
+
+            public readonly string Original;
+            public readonly string CaseInsensitive;
+        }
+
+        class PathComparer : IEqualityComparer<Path>
+        {
+            public int GetHashCode(Path p) { return p.CaseInsensitive.GetHashCode(); }
+            public bool Equals(Path p, Path q) { return p.CaseInsensitive == q.CaseInsensitive; }
+        }
 
         // See:
         // https://docs.microsoft.com/en-us/visualstudio/extensibility/dynamically-adding-menu-items
@@ -75,21 +107,29 @@ namespace UndoCloseDocument
         /// </summary>
         /// <param name="package">Owner package, not null.</param>
         /// <param name="commandService">Command service to add command to, not null.</param>
-        private UndoCloseDocument(Package package, OleMenuCommandService commandService, DTE2 dte)
+        private UndoCloseDocument(Package package, OleMenuCommandService commandService, IVsUIShell uiShell, DTE2 dte)
         {
             this.package = package ?? throw new ArgumentNullException(nameof(package));
             commandService = commandService ?? throw new ArgumentNullException(nameof(commandService));
+
+            this.uiShell = uiShell ?? throw new ArgumentNullException("IVsUIShell");
             this.dte = dte ?? throw new ArgumentNullException("DTE");
 
             this.events = this.dte.Events ?? throw new NullReferenceException(nameof(this.events));
-
-            this.documentEvents = this.events.DocumentEvents ?? throw new NullReferenceException("DocumentEvents");
-            this.documentEvents.DocumentOpening += DocumentEvents_DocumentOpening;
+            this.solutionEvents = this.events.SolutionEvents ?? throw new NullReferenceException("SolutionEvents");
+            this.solutionEvents.Opened += SolutionEvents_Opened;
+            //this.solutionEvents.BeforeClosing += SolutionEvents_BeforeClosing;
+            this.solutionEvents.AfterClosing += SolutionEvents_AfterClosing;
+            //this.documentEvents = this.events.DocumentEvents ?? throw new NullReferenceException("DocumentEvents");
+            //this.documentEvents.DocumentOpening += DocumentEvents_DocumentOpening;
             //this.documentEvents.DocumentOpened += DocumentEvents_DocumentOpened;
-            this.documentEvents.DocumentClosing += DocumentEvents_DocumentClosing;
-            //this.windowEvents = this.events.WindowEvents ?? throw new NullReferenceException("WindowEvents");
-            //this.windowEvents.WindowCreated += WindowEvents_WindowCreated;
-            //this.windowEvents.WindowClosing += WindowEvents_WindowClosing;
+            //this.documentEvents.DocumentClosing += DocumentEvents_DocumentClosing;
+            this.windowEvents = this.events.WindowEvents ?? throw new NullReferenceException("WindowEvents");
+            this.windowEvents.WindowCreated += WindowEvents_WindowCreated;
+            this.windowEvents.WindowClosing += WindowEvents_WindowClosing;
+            //this.commandEvents = this.events.CommandEvents ?? throw new NullReferenceException("CommandEvents");
+            //this.commandEvents.BeforeExecute += CommandEvents_BeforeExecute;
+            //this.commandEvents.AfterExecute += CommandEvents_AfterExecute;
 
             var menuCommandID = new CommandID(CommandSet, CommandId);
             //var menuItem = new MenuCommand(this.Execute, menuCommandID);
@@ -131,9 +171,10 @@ namespace UndoCloseDocument
         public static void Initialize(UndoCloseDocumentPackage package)
         {
             OleMenuCommandService commandService = package.GetService(typeof(IMenuCommandService)) as OleMenuCommandService;
+            IVsUIShell uiShell = package.GetService(typeof(SVsUIShell)) as IVsUIShell;
             DTE2 dte = package.GetService(typeof(DTE)) as DTE2;
-
-            Instance = new UndoCloseDocument(package, commandService, dte);
+            
+            Instance = new UndoCloseDocument(package, commandService, uiShell, dte);
         }
 
         /// <summary>
@@ -158,39 +199,97 @@ namespace UndoCloseDocument
                 return;
 
             int lastIndex = closedDocuments.Count - 1;
-            string fullName = closedDocuments[lastIndex];
+            string fullName = closedDocuments[lastIndex].Original;
             closedDocuments.RemoveAt(lastIndex);
 
             //if (!dte.ItemOperations.IsFileOpen(fullName))
                 dte.ItemOperations.OpenFile(fullName);
         }
 
-        private void DocumentEvents_DocumentClosing(Document document)
+        private void SolutionEvents_AfterClosing()
         {
-            if (document != null)
-            {
-                closedDocuments.Add(document.FullName);
-
-                if (closedDocuments.Count > 10)
-                    closedDocuments.RemoveRange(0, closedDocuments.Count - 10);
-            }
+            openedDocuments.Clear();
         }
 
-        private void DocumentEvents_DocumentOpening(string DocumentPath, bool ReadOnly)
+        private void SolutionEvents_BeforeClosing()
         {
-            if (DocumentPath != null)
-                closedDocuments.Remove(DocumentPath);
+        }
+
+        private void SolutionEvents_Opened()
+        {
+            HandleWindowCreate();
+        }
+
+        private void DocumentEvents_DocumentClosing(Document document)
+        {
+        }
+
+        private void DocumentEvents_DocumentOpening(string documentPath, bool readOnly)
+        {
         }
 
         private void DocumentEvents_DocumentOpened(Document document)
         {
         }
 
-        private void WindowEvents_WindowCreated(Window window)
-        {   
+        private void WindowEvents_WindowClosing(Window window)
+        {
+            HandleWindowClose(window, true);
         }
 
-        private void WindowEvents_WindowClosing(Window window)
+        private void WindowEvents_WindowCreated(Window window)
+        {
+            HandleWindowCreate(window, true);
+        }
+
+        private void CommandEvents_AfterExecute(string guid, int id, object customIn, object customOut)
+        {
+            if (id == 658 // CloseDocument
+             || id == 627 // CloseAllDocuments
+             || id == 219 // CloseSolution
+             || id == 223 // FileClose
+             || id == 222 // FileOpen
+             || id == 221 // FileNew
+             || id == 451 // FileOpenFromWeb
+             || id == 261 // Open
+             || id == 217 // OpenProject
+             || id == 450 // OpenProjectFromWeb
+             || id == 315 // OpenProjectItem
+             || id == 218 // OpenSolution
+             || id == 199 // OpenWith
+             || id == 343 // LoadUnloadedProject
+             || id == 412 // ReloadProject
+             || id == 344 // UnloadLoadedProject
+             || id == 413 // UnloadProject
+             )
+            {
+                if (new Guid(guid) == new Guid("{5EFC7975-14BC-11CF-9B2B-00AA00573819}")) // VSStd97CmdID
+                {
+                }
+            }
+            else if (id == 22) // CloseAllButPinned
+            {
+                if (new Guid(guid) == new Guid("{D63DB1F0-404E-4B21-9648-CA8D99245EC3}")) // VSStd11CmdID
+                {
+                }
+            }
+            else if (id == 528) // CloseAllButToolWindows
+            {
+                if (new Guid(guid) == new Guid("{712C6C80-883B-4AAD-B430-BBCA5256FA9D}")) // VSStd15CmdID
+                {
+                }
+            }
+            else if (id == 1650 // CloseAllButThis
+                  || id == 1982 // CloseProject 
+                  )
+            {
+                if (new Guid(guid) == new Guid("{1496A755-94DE-11D0-8C3F-00C04FC2AAE2}")) // VSStd2KCmdID
+                {
+                }
+            }
+        }
+
+        private void CommandEvents_BeforeExecute(string guid, int id, object customIn, object customOut, ref bool cancelDefault)
         {
         }
 
@@ -217,7 +316,7 @@ namespace UndoCloseDocument
                 {
                     int i = closedDocuments.Count - 1 - index;
                     matchedCommand.Text = (index + 1).ToString() + " "
-                                        + ShortifyPath(closedDocuments[i], 60);
+                                        + ShortifyPath(closedDocuments[i].Original, 60);
                 }
                 else
                 {
@@ -255,7 +354,7 @@ namespace UndoCloseDocument
             {
                 int i = closedDocuments.Count - 1 - index;
 
-                string fullName = closedDocuments[i];
+                string fullName = closedDocuments[i].Original;
                 closedDocuments.RemoveAt(i);
 
                 //if (!dte.ItemOperations.IsFileOpen(fullName))
@@ -285,6 +384,119 @@ namespace UndoCloseDocument
             return path.Substring(0, firstIndex + 1) + "..." + path.Substring(i);
         }
 
-        List<string> closedDocuments = new List<string>();
+        private void HandleWindowClose(Window window = null, bool useWindow = true)
+        {
+            if (useWindow && window != null && window.Document != null)
+            {
+                Path path = new Path(window.Document.FullName);
+                openedDocuments.Remove(path); // result could by used here too
+
+                if (closedDocuments.FindIndex(p => p.IsSame(path)) < 0)
+                    closedDocuments.Add(path);
+            }
+            else
+            {
+                ForEachWindowFrame(delegate (string dm, DocumentState ds)
+                {
+                    if (ds != DocumentState.DocumentOpened)
+                    {
+                        Path path = new Path(dm);
+                        if (openedDocuments.Remove(path))
+                        {
+                            if (closedDocuments.FindIndex(p => p.IsSame(path)) < 0)
+                                closedDocuments.Add(path);
+                        }
+                    }
+                });
+            }
+
+            // Store max 10 recently closed documents
+            if (closedDocuments.Count > 10)
+                closedDocuments.RemoveRange(0, closedDocuments.Count - 10);
+        }
+
+        private void HandleWindowCreate(Window window = null, bool useWindow = true)
+        {
+            if (useWindow && window != null && window.Document != null)
+            {
+                Path path = new Path(window.Document.FullName);
+                openedDocuments.Add(path); // result could by used here too
+
+                int i = closedDocuments.FindIndex(p => p.IsSame(path));
+                if (i >= 0)
+                    closedDocuments.RemoveAt(i);
+            }
+            else
+            {
+                ForEachWindowFrame(delegate (string dm, DocumentState ds)
+                {
+                    Path path = new Path(dm);
+                    if (openedDocuments.Add(path))
+                    {
+                        int i = closedDocuments.FindIndex(p => p.IsSame(path));
+                        if (i >= 0)
+                            closedDocuments.RemoveAt(i);
+                    }
+                });        
+            }
+        }
+
+        enum DocumentState { Unknown, DocumentClosed, DocumentOpened }
+
+        class WindowFrame
+        {
+            public WindowFrame(string documentMoniker, DocumentState documentState)
+            {
+                DocumentMoniker = documentMoniker;
+                DocumentState = documentState;
+            }
+
+            public readonly string DocumentMoniker;
+            public readonly DocumentState DocumentState;
+        }
+
+        delegate void WindowFrameDelegate(string documentMoniker, DocumentState documentState);
+
+        void ForEachWindowFrame(WindowFrameDelegate windowFrameDelegate)
+        {
+            IEnumWindowFrames windowsEnum;
+            if (uiShell.GetDocumentWindowEnum(out windowsEnum) != VSConstants.S_OK)
+                return;
+
+            for (;;)
+            {
+                IVsWindowFrame[] frames = new IVsWindowFrame[10];
+                uint count = 0;
+                if (windowsEnum.Next(10, frames, out count) != VSConstants.S_OK)
+                    break;
+
+                for (uint i = 0; i < count; ++i)
+                {
+                    IVsWindowFrame w = frames[i];
+                    object o = null;
+                    if (w.GetProperty((int)__VSFPROPID.VSFPROPID_pszMkDocument, out o) == VSConstants.S_OK)
+                    {
+                        string dm = o as string;
+                        if (dm != null)
+                        {
+                            DocumentState ds = DocumentState.Unknown;
+                            o = null;
+                            if (w.GetProperty((int)__VSFPROPID.VSFPROPID_DocData, out o) == VSConstants.S_OK)
+                            {
+                                if (o != null)
+                                    ds = DocumentState.DocumentOpened;
+                                else
+                                    ds = DocumentState.DocumentClosed;
+                            }
+
+                            windowFrameDelegate(dm, ds);
+                        }
+                    }
+                }
+
+                if (count < 10)
+                    break;
+            }
+        }
     }
 }
