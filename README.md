@@ -10,4 +10,6 @@ This extension allows to reopen recently closed document tab.
 
 You can set keyboard shortcut in **Options** under **Environment->Keyboard** command **Window.UndoCloseDocument**.
 
+This extension has to be autoloaded with Visual Studio to work properly. It supports Visual Studio as old as 2013 which means it's loaded synchroniously. In Visual Studio 2019 synchronious autoloading is disabled by default. If you want to use this extension with Visual Studio 2019 you have to **Allow synchronous autoload of extensions** in **Options** under **Environment->Extensions**.
+
 You can download this extension from [Visual Studio Marketplace](https://marketplace.visualstudio.com/items?itemName=AdamWulkiewicz.UndoCloseDocument) or [GitHub](https://github.com/awulkiew/undo-close-document/releases).
