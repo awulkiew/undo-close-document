@@ -208,8 +208,15 @@ namespace UndoCloseDocument
             string fullName = closedDocuments[lastIndex].Original;
             closedDocuments.RemoveAt(lastIndex);
 
-            //if (!dte.ItemOperations.IsFileOpen(fullName))
-                dte.ItemOperations.OpenFile(fullName);
+            try
+            {
+                //if (!dte.ItemOperations.IsFileOpen(fullName))
+                   dte.ItemOperations.OpenFile(fullName);
+            }
+            catch(Exception)
+            {
+                // ignore
+            }
         }
 
         private void SolutionEvents_AfterClosing()
@@ -363,8 +370,15 @@ namespace UndoCloseDocument
                 string fullName = closedDocuments[i].Original;
                 closedDocuments.RemoveAt(i);
 
-                //if (!dte.ItemOperations.IsFileOpen(fullName))
-                    dte.ItemOperations.OpenFile(fullName);
+                try
+                {
+                    //if (!dte.ItemOperations.IsFileOpen(fullName))
+                        dte.ItemOperations.OpenFile(fullName);
+                }
+                catch(Exception)
+                {
+                    // ignore
+                }
             }
         }
 
@@ -397,8 +411,11 @@ namespace UndoCloseDocument
                 Path path = new Path(window.Document.FullName);
                 openedDocuments.Remove(path); // result could by used here too
 
-                if (closedDocuments.FindIndex(p => p.IsSame(path)) < 0)
+                if (closedDocuments.FindIndex(p => p.IsSame(path)) < 0
+                    && !IsProjectPath(path))
+                {
                     closedDocuments.Add(path);
+                }
             }
             else
             {
@@ -409,8 +426,11 @@ namespace UndoCloseDocument
                         Path path = new Path(dm);
                         if (openedDocuments.Remove(path))
                         {
-                            if (closedDocuments.FindIndex(p => p.IsSame(path)) < 0)
+                            if (closedDocuments.FindIndex(p => p.IsSame(path)) < 0
+                                && !IsProjectPath(path))
+                            {
                                 closedDocuments.Add(path);
+                            }
                         }
                     }
                 });
@@ -445,6 +465,20 @@ namespace UndoCloseDocument
                     }
                 });        
             }
+        }
+
+        private bool IsProjectPath(Path path)
+        {
+            string name = path.CaseInsensitive;
+            int index = name.IndexOf(';');
+            if (index >= 0)
+                name = name.Substring(0, index);
+
+            foreach (Project p in dte.Solution.Projects)
+                if (p.FullName.ToLowerInvariant() == name)
+                    return true;
+
+            return false;
         }
 
         enum DocumentState { Unknown, DocumentClosed, DocumentOpened }
