@@ -44,6 +44,8 @@ namespace UndoCloseDocument
         private WindowEvents windowEvents;
         //private CommandEvents commandEvents;
 
+        private UndoCloseDocumentOptionPage optionPage;
+
         private List<Path> closedDocuments = new List<Path>();
         private HashSet<Path> openedDocuments = new HashSet<Path>(new PathComparer());
 
@@ -107,7 +109,7 @@ namespace UndoCloseDocument
         /// </summary>
         /// <param name="package">Owner package, not null.</param>
         /// <param name="commandService">Command service to add command to, not null.</param>
-        private UndoCloseDocument(Package package, OleMenuCommandService commandService, IVsUIShell uiShell, DTE2 dte)
+        private UndoCloseDocument(UndoCloseDocumentPackage package, OleMenuCommandService commandService, IVsUIShell uiShell, DTE2 dte)
         {
             this.package = package ?? throw new ArgumentNullException(nameof(package));
             commandService = commandService ?? throw new ArgumentNullException(nameof(commandService));
@@ -130,6 +132,10 @@ namespace UndoCloseDocument
             //this.commandEvents = this.events.CommandEvents ?? throw new NullReferenceException("CommandEvents");
             //this.commandEvents.BeforeExecute += CommandEvents_BeforeExecute;
             //this.commandEvents.AfterExecute += CommandEvents_AfterExecute;
+
+            this.optionPage = package.GetDialogPage(typeof(UndoCloseDocumentOptionPage)) as UndoCloseDocumentOptionPage;
+            if (this.optionPage == null)
+                throw new NullReferenceException("OptionPage");
 
             var menuCommandID = new CommandID(CommandSet, CommandId);
             //var menuItem = new MenuCommand(this.Execute, menuCommandID);
@@ -296,7 +302,7 @@ namespace UndoCloseDocument
         private bool IsValidDynamicItem(int commandId)
         {
             int index = commandId - DynamicItemMenuCommand.CommandId;
-            return index >= 0 && index < closedDocuments.Count;
+            return index >= 0 && index < Math.Min(this.optionPage.Show, closedDocuments.Count);
         }
 
         private void OnBeforeQueryStatusDynamicItem(object sender, EventArgs args)
@@ -410,9 +416,9 @@ namespace UndoCloseDocument
                 });
             }
 
-            // Store max 10 recently closed documents
-            if (closedDocuments.Count > 10)
-                closedDocuments.RemoveRange(0, closedDocuments.Count - 10);
+            // Store max N recently closed documents
+            if (closedDocuments.Count > this.optionPage.Remember)
+                closedDocuments.RemoveRange(0, closedDocuments.Count - this.optionPage.Remember);
         }
 
         private void HandleWindowCreate(Window window = null, bool useWindow = true)

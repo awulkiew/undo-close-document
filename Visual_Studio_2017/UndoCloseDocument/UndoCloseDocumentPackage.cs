@@ -38,6 +38,7 @@ namespace UndoCloseDocument
     [ProvideAutoLoad(VSConstants.UICONTEXT.SolutionHasSingleProject_string)]
     [Guid(UndoCloseDocumentPackage.PackageGuidString)]
     [SuppressMessage("StyleCop.CSharp.DocumentationRules", "SA1650:ElementDocumentationMustBeSpelledCorrectly", Justification = "pkgdef, VS and vsixmanifest are valid VS terms")]
+    [ProvideOptionPage(typeof(UndoCloseDocumentOptionPage), "Undo Close Document", "General", 0, 0, true)]
     public sealed class UndoCloseDocumentPackage : Package
     {
         /// <summary>
