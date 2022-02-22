@@ -4,7 +4,7 @@
     <Identity Id="UndoCloseDocument.4824c4fd-eaea-4f2f-a04b-085525d85182" Version="1.1" Language="en-US" Publisher="Adam Wulkiewicz" />
     <DisplayName>Undo Close Document</DisplayName>
     <Description xml:space="preserve">Reopen recently closed documents.</Description>
-    <License>LICENSE_1_0.txt</License>
+    <License>LICENSE.txt</License>
     <Icon>icon.png</Icon>
     <PreviewImage>preview.png</PreviewImage>
     <Tags>undo close document tab window reopen closed</Tags>
