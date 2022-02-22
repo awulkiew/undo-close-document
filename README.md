@@ -1,5 +1,11 @@
 # Undo Close Document
-## extension for Visual Studio 2013, 2015, 2017 and 2019
+### Extension for Visual Studio 2013, 2015, 2017 and 2019
+
+[![VS Marketplace](https://vsmarketplacebadge.apphb.com/version-short/AdamWulkiewicz.UndoCloseDocument.svg)](https://marketplace.visualstudio.com/items?itemName=AdamWulkiewicz.UndoCloseDocument)
+[![Installs](https://vsmarketplacebadge.apphb.com/installs-short/AdamWulkiewicz.UndoCloseDocument.svg)](https://marketplace.visualstudio.com/items?itemName=AdamWulkiewicz.UndoCloseDocument)
+[![Rating](https://vsmarketplacebadge.apphb.com/rating-short/AdamWulkiewicz.UndoCloseDocument.svg)](https://marketplace.visualstudio.com/items?itemName=AdamWulkiewicz.UndoCloseDocument)
+![License](https://img.shields.io/github/license/awulkiew/undo-close-document.svg)
+[![Donate](https://img.shields.io/badge/Donate-_-yellow.svg)](https://awulkiew.github.io/donate)
 
 This extension allows to reopen recently closed document tab.
 
