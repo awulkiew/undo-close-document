@@ -1,9 +1,9 @@
 # Undo Close Document
 ### Extension for Visual Studio 2013, 2015, 2017 and 2019
 
-[![VS Marketplace](https://vsmarketplacebadge.apphb.com/version-short/AdamWulkiewicz.UndoCloseDocument.svg)](https://marketplace.visualstudio.com/items?itemName=AdamWulkiewicz.UndoCloseDocument)
-[![Installs](https://vsmarketplacebadge.apphb.com/installs-short/AdamWulkiewicz.UndoCloseDocument.svg)](https://marketplace.visualstudio.com/items?itemName=AdamWulkiewicz.UndoCloseDocument)
-[![Rating](https://vsmarketplacebadge.apphb.com/rating-short/AdamWulkiewicz.UndoCloseDocument.svg)](https://marketplace.visualstudio.com/items?itemName=AdamWulkiewicz.UndoCloseDocument)
+[![VS Marketplace](https://vsmarketplacebadges.dev/version-short/AdamWulkiewicz.UndoCloseDocument.svg)](https://marketplace.visualstudio.com/items?itemName=AdamWulkiewicz.UndoCloseDocument)
+[![Installs](https://vsmarketplacebadges.dev/installs-short/AdamWulkiewicz.UndoCloseDocument.svg)](https://marketplace.visualstudio.com/items?itemName=AdamWulkiewicz.UndoCloseDocument)
+[![Rating](https://vsmarketplacebadges.dev/rating-short/AdamWulkiewicz.UndoCloseDocument.svg)](https://marketplace.visualstudio.com/items?itemName=AdamWulkiewicz.UndoCloseDocument)
 ![License](https://img.shields.io/github/license/awulkiew/undo-close-document.svg)
 [![Donate](https://img.shields.io/badge/Donate-_-yellow.svg)](https://awulkiew.github.io/donate)
 
